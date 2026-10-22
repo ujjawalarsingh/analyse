@@ -1,0 +1,182 @@
+
+openapi: 3.0.3
+
+info:
+  title: Log Analyzer Service
+  description: Upload a log file and find which services are failing.
+  version: 1.0.0
+
+servers:
+  - url: http://127.0.0.1:8000
+
+# Configuration read by the Python log analyzer.
+x-log-analyzer:
+  validLevels:
+    - ERROR
+    - INFO
+    - WARN
+    - WARNING
+    - DEBUG
+    - CRITICAL
+    - FATAL
+    - TRACE
+
+paths:
+  /health:
+    get:
+      operationId: health
+      summary: Liveness check
+      tags:
+        - Health
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /analyze:
+    post:
+      operationId: analyze
+      summary: Analyze a log file
+      description: >
+        Upload a log file using multipart/form-data
+        and get ERROR counts per service.
+      tags:
+        - Analyze
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/analyze_request"
+      responses:
+        "200":
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResult"
+        "400":
+          description: File is not valid UTF-8 text
+        "422":
+          description: Missing or invalid file field
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: ok
+
+    AnalysisResult:
+      type: object
+      additionalProperties: false
+      required:
+        - lines_processed
+        - lines_skipped
+        - errors_by_service
+        - top_offender
+      properties:
+        lines_processed:
+          type: integer
+          minimum: 0
+          example: 5
+
+        lines_skipped:
+          type: integer
+          minimum: 0
+          example: 1
+
+        errors_by_service:
+          type: object
+          additionalProperties: false
+          required:
+            - primary
+            - secondary
+          properties:
+            primary:
+              type: object
+              additionalProperties: false
+              required:
+                - order-service
+                - payment-service
+                - auth-service
+              properties:
+                order-service:
+                  type: integer
+                  minimum: 0
+                  description: Error count for order-service.
+                  example: 0
+
+                payment-service:
+                  type: integer
+                  minimum: 0
+                  description: Error count for payment-service.
+                  example: 2
+
+                auth-service:
+                  type: integer
+                  minimum: 0
+                  description: Error count for auth-service.
+                  example: 0
+
+            secondary:
+              type: object
+              description: >
+                Dynamically discovered services other than
+                the configured primary services.
+              additionalProperties:
+                type: integer
+                minimum: 0
+              example:
+                billing-service: 3
+                notification-service: 1
+
+        top_offender:
+          type: string
+          nullable: true
+          description: >
+            Service with the highest ERROR count,
+            or null if there are no errors.
+          example: payment-service
+
+        skipped_details:
+          type: array
+          nullable: true
+          description: Diagnostics for skipped non-empty lines.
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - line
+              - content
+              - error
+            properties:
+              line:
+                type: integer
+                minimum: 1
+                example: 3
+              content:
+                type: string
+                example: bad log line
+              error:
+                type: string
+                example: Missing or invalid date field
+
+    analyze_request:
+      type: object
+      required:
+        - file
+      properties:
+        file:
+          type: string
+          format: binary
+          description: A .log or .txt file to analyze.
+

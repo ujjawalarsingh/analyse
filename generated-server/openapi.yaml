@@ -1,0 +1,221 @@
+openapi: 3.0.3
+info:
+  description: Upload a log file and find which services are failing.
+  title: Log Analyzer Service
+  version: 1.0.0
+servers:
+- url: http://127.0.0.1:8000
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+          description: Service is up
+      summary: Liveness check
+      tags:
+      - Health
+  /analyze:
+    post:
+      description: |
+        Upload a log file using multipart/form-data and get ERROR counts per service.
+      operationId: analyze
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/analyze_request"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResult"
+          description: Analysis result
+        "400":
+          description: File is not valid UTF-8 text
+        "422":
+          description: Missing or invalid file field
+      summary: Analyze a log file
+      tags:
+      - Analyze
+components:
+  schemas:
+    HealthResponse:
+      additionalProperties: false
+      example:
+        status: ok
+      properties:
+        status:
+          example: ok
+          title: status
+          type: string
+      required:
+      - status
+      title: HealthResponse
+      type: object
+    AnalysisResult:
+      additionalProperties: false
+      example:
+        lines_processed: 5
+        lines_skipped: 1
+        errors_by_service:
+          primary:
+            order-service: 0
+            payment-service: 2
+            auth-service: 0
+          secondary:
+            billing-service: 3
+            notification-service: 1
+        top_offender: payment-service
+        skipped_details:
+        - line: 3
+          content: bad log line
+          error: Missing or invalid date field
+        - line: 3
+          content: bad log line
+          error: Missing or invalid date field
+      properties:
+        lines_processed:
+          example: 5
+          minimum: 0
+          title: lines_processed
+          type: integer
+        lines_skipped:
+          example: 1
+          minimum: 0
+          title: lines_skipped
+          type: integer
+        errors_by_service:
+          $ref: "#/components/schemas/AnalysisResult_errors_by_service"
+        top_offender:
+          description: |
+            Service with the highest ERROR count, or null if there are no errors.
+          example: payment-service
+          nullable: true
+          title: top_offender
+          type: string
+        skipped_details:
+          description: Diagnostics for skipped non-empty lines.
+          items:
+            $ref: "#/components/schemas/AnalysisResult_skipped_details_inner"
+          nullable: true
+          title: skipped_details
+          type: array
+      required:
+      - errors_by_service
+      - lines_processed
+      - lines_skipped
+      - top_offender
+      title: AnalysisResult
+      type: object
+    analyze_request:
+      properties:
+        file:
+          description: A .log or .txt file to analyze.
+          format: binary
+          type: string
+      required:
+      - file
+      type: object
+    AnalysisResult_errors_by_service_primary:
+      additionalProperties: false
+      example:
+        order-service: 0
+        payment-service: 2
+        auth-service: 0
+      properties:
+        order-service:
+          description: Error count for order-service.
+          example: 0
+          minimum: 0
+          title: order-service
+          type: integer
+        payment-service:
+          description: Error count for payment-service.
+          example: 2
+          minimum: 0
+          title: payment-service
+          type: integer
+        auth-service:
+          description: Error count for auth-service.
+          example: 0
+          minimum: 0
+          title: auth-service
+          type: integer
+      required:
+      - auth-service
+      - order-service
+      - payment-service
+      title: AnalysisResult_errors_by_service_primary
+      type: object
+    AnalysisResult_errors_by_service:
+      additionalProperties: false
+      example:
+        primary:
+          order-service: 0
+          payment-service: 2
+          auth-service: 0
+        secondary:
+          billing-service: 3
+          notification-service: 1
+      properties:
+        primary:
+          $ref: "#/components/schemas/AnalysisResult_errors_by_service_primary"
+        secondary:
+          additionalProperties:
+            minimum: 0
+            type: integer
+          description: |
+            Dynamically discovered services other than the configured primary services.
+          example:
+            billing-service: 3
+            notification-service: 1
+          title: secondary
+          type: object
+      required:
+      - primary
+      - secondary
+      title: AnalysisResult_errors_by_service
+      type: object
+    AnalysisResult_skipped_details_inner:
+      additionalProperties: false
+      example:
+        line: 3
+        content: bad log line
+        error: Missing or invalid date field
+      properties:
+        line:
+          example: 3
+          minimum: 1
+          title: line
+          type: integer
+        content:
+          example: bad log line
+          title: content
+          type: string
+        error:
+          example: Missing or invalid date field
+          title: error
+          type: string
+      required:
+      - content
+      - error
+      - line
+      title: AnalysisResult_skipped_details_inner
+      type: object
+x-log-analyzer:
+  validLevels:
+  - ERROR
+  - INFO
+  - WARN
+  - WARNING
+  - DEBUG
+  - CRITICAL
+  - FATAL
+  - TRACE
